@@ -50,30 +50,43 @@ class RijndaelGF(SageObject):
         z = polygen(Integers(2))
         mod = z**8 + z**4 + z**3 + z + 1
         self._F = FiniteField(2**self._bits_to_word, 'x', modulus=mod)
-        # Note: Any matrix created with these must be transposed!
-        # TODO: See if we can have MatrixSpace read a list column-wise
         self._state_ms = MatrixSpace(self._F, 4, self._Nb)
         self._key_ms = MatrixSpace(self._F, 4, self._Nk)
         self._round_num_table = matrix([[10,11,12,13,14], [11,11,12,13,14],
                                        [12,12,12,13,14], [13,13,13,13,14],
                                        [14,14,14,14,14]])
-        self._sr_offset = matrix([[0,1,2,3], [0,1,2,3], [0,1,2,3],
+        self._shiftrows_offset_E = matrix([[0,1,2,3], [0,1,2,3], [0,1,2,3],
                                    [0,1,2,4], [0,1,3,4]])
+        self._shiftrows_offset_D = matrix([[0,-1,-2,-3], [0,-1,-2,-3],
+                                           [0,-1,-2,-3], [0,-1,-2,-4],
+                                           [0,-1,-3,-4]])
         self._Nr = self._round_num_table[self._Nb - 4][self._Nk - 4]
         self._polyring = PolynomialRing(self._F, 'p')
-        coeffs = [self._F("x^2 + 1"), 
-                  self._F("x^3 + 1"), 
-                  self._F("x^7 + x^6 + x^5 + x^4 + x^3 + 1"), 
-                  self._F("x^5 + x^2 + 1"), 
-                  self._F("x^7 + x^6 + x^5 + x^4 + x^2"), 
-                  self._F("1"),
-                  self._F("x^7 + x^5 + x^4 + x^2 + 1"),
-                  self._F("x^7 + x^3 + x^2 + x + 1")]
-        # Fix this line!
-        self._sb_affine_E = sum([coeffs[i] * self._polyring.gen()**(2**i) for i in range(8)])
+        sb_E_coeffs = [self._F("x^2 + 1"), 
+                       self._F("x^3 + 1"), 
+                       self._F("x^7 + x^6 + x^5 + x^4 + x^3 + 1"), 
+                       self._F("x^5 + x^2 + 1"), 
+                       self._F("x^7 + x^6 + x^5 + x^4 + x^2"), 
+                       self._F("1"),
+                       self._F("x^7 + x^5 + x^4 + x^2 + 1"),
+                       self._F("x^7 + x^3 + x^2 + x + 1")]
+        # Fix this/these line/s!
+        self._sb_affine_E = sum([sb_E_coeffs[i] * self._polyring.gen()**(2**i) for i in range(8)])
         self._sb_affine_E += self._polyring("x^6 + x^5 + x + 1")
+        sb_D_coeffs = [self._F("x^2 + 1"),
+                       self._F("x^7 + x^6 + x^5 + x^4 + x^3 + x^2 + x"),
+                       self._F("x^6 + x^5 + x^4 + x^3 + x^2 + x + 1"), 
+                       self._F("x^6 + x^4 + x^3 + x"), 
+                       self._F("x^6 + x^5 + x^4 + x^3"),
+                       self._F("x^6 + x^4 + x^3 + 1"), 
+                       self._F("x^7 + x^6 + x^4 + x^3 + x + 1"),
+                       self._F("x^6 + x^5 + x^3 + x^2 + x")]
+        self._sb_affine_D = sum([sb_D_coeffs[i] * self._polyring.gen()**(2**i) for i in range(8)])
+        self._sb_affine_D += self._polyring("x^2 + 1")
         self._mix_col_cx = self._polyring("(x+1)*(p^3) + p^2 + p^1 + x")
-#        self._mix_col_dx =  
+        self._mix_col_dx = self._polyring("""(x^3 + x + 1)*(p^3) + 
+                                          (x^3 + x^2 + 1)*(p^2) + (x^3 + 1)*p +
+                                          (x^3 + x^2 + x)""")
         self._mix_col_mod = self._polyring("p^4 + 1")
         
     # Is there any way to make this prettier?
@@ -113,17 +126,43 @@ class RijndaelGF(SageObject):
         state = self.add_round_key(state, roundKeys[0])
 
         for r in range(self._Nr-1):
-            state = self.sub_bytes(state)
-            state = self.shift_rows(state)
-            state = self.mix_columns(state)
+            state = self.sub_bytes(state, algorithm='encrypt')
+            state = self.shift_rows(state, algorithm='encrypt')
+            state = self.mix_columns(state, algorithm='encrypt')
             state = self.add_round_key(state, roundKeys[r+1])
             
         # Final round
-        state = self.sub_bytes(state)
-        state = self.shift_rows(state)
+        state = self.sub_bytes(state, algorithm='encrypt')
+        state = self.shift_rows(state, algorithm='encrypt')
         state = self.add_round_key(state, roundKeys[self._Nr])
             
         # convert back to form given and return
+        return self._Fmatrix_to_hex(state)
+
+    def decrypt(self, ciphertext, key, format='hex'):
+        if format == 'hex':
+            if len(ciphertext) % 2 == 1:
+                raise ValueError('\'plain\' keyword''s length must be even')
+            if len(key) % 2 == 1:
+                raise ValueError('\'key\' keyword\'s length must be even')
+
+            state = self._hex_to_Fmatrix(ciphertext)
+            roundKeys = self.expand_key(self._hex_to_Fmatrix(key))
+
+        # Undo final round
+        state = self.add_round_key(state, roundKeys[self._Nr])
+        state = self.shift_rows(state, algorithm='decrypt')
+        state = self.sub_bytes(state, algorithm='decrypt')
+
+        for r in range(self._Nr-1):
+            # Check if numbering is correct!
+            state = self.add_round_key(state, roundKeys[self._Nr - r - 1])
+            state = self.mix_columns(state, algorithm='decrypt')
+            state = self.shift_rows(state, algorithm='decrypt')
+            state = self.sub_bytes(state, algorithm='decrypt')
+            
+        state = self.add_round_key(state, roundKeys[0])
+
         return self._Fmatrix_to_hex(state)
                   
     # We should expand a key into a list-matrix of the appropriate size,
@@ -142,14 +181,16 @@ class RijndaelGF(SageObject):
             
         for j in range(self._Nk, self._Nb * (self._Nr + 1)):
             if j % self._Nk == 0:
-                expanded[0][j] = expanded[0][j - self._Nk] + self._srd(expanded[1][j-1]) + \
+                expanded[0][j] = expanded[0][j - self._Nk] + \
+                                 self._srd(expanded[1][j-1]) + \
                                  self._F.gen()**(int(j/self._Nk)-1)
                 for i in range(1,4):
                     expanded[i][j] = expanded[i][j - self._Nk] + \
                                      self._srd(expanded[(i+1) % 4][j-1])
             else:
                 for i in range(4):
-                    expanded[i][j] = expanded[i][j - self._Nk] + expanded[i][j-1]
+                    expanded[i][j] = expanded[i][j - self._Nk] + \
+                                     expanded[i][j-1]
 
         round_keys = []
         for r in range(self._Nr + 1):
@@ -172,13 +213,16 @@ class RijndaelGF(SageObject):
                 newEl = el
 
             return self._sb_affine_E.subs(p = newEl)
-        else:
+        elif algorithm == 'decrypt':
             newEl = self._sb_affine_D.subs(p = el)
 
-            if newEl == F.zero():
+            if newEl == self._F.zero():
                 return newEl
             else:
                 return newEl ** -1
+        else:
+            raise ValueError("""keyword 'algorithm' must be either 'encrypt'
+                             or 'decrypt'""")
     
     def sub_bytes(self, state, algorithm='encrypt'):
         new_state = []
@@ -187,9 +231,16 @@ class RijndaelGF(SageObject):
         return self._state_ms(new_state)
 
     def mix_columns(self, state, algorithm='encrypt'):
+        if algorithm == 'encrypt':
+            constant = self._mix_col_cx
+        elif algorithm == 'decrypt':
+            constant = self._mix_col_dx
+        else:
+            raise ValueError("""keyword 'algorithm' must be either 'encrypt'
+                             or 'decrypt'""")
         newState = [[], [], [], []]
         for col in state.columns():
-            bx = self._mix_col_cx * self._polyring(list(col))
+            bx = constant * self._polyring(list(col))
             bx = list(bx.mod(self._mix_col_mod))
             bx = bx + [self._F.zero()]*(4 - len(bx))
             for i in range(4):
@@ -201,11 +252,20 @@ class RijndaelGF(SageObject):
         return row[n:] + row[:n]
 
     def shift_rows(self, state, algorithm='encrypt'):
+        if algorithm == 'encrypt':
+            offset = self._shiftrows_offset_E
+        elif algorithm == 'decrypt':
+            offset = self._shiftrows_offset_D
+        else:
+            raise ValueError("""keyword 'algorithm' must be either 'encrypt'
+                             or 'decrypt'""")
+
         rows = [[], [], [], []]
-        rows[0] = self._rotate_row(state[0], self._sr_offset[self._Nb - 4][0])
-        rows[1] = self._rotate_row(state[1], self._sr_offset[self._Nb - 4][1])
-        rows[2] = self._rotate_row(state[2], self._sr_offset[self._Nb - 4][2])
-        rows[3] = self._rotate_row(state[3], self._sr_offset[self._Nb - 4][3])
+        rows[0] = self._rotate_row(state[0], offset[self._Nb - 4][0])
+        rows[1] = self._rotate_row(state[1], offset[self._Nb - 4][1])
+        rows[2] = self._rotate_row(state[2], offset[self._Nb - 4][2])
+        rows[3] = self._rotate_row(state[3], offset[self._Nb - 4][3])
+            
         return self._state_ms(rows)
 
 # TODO: add self._srd_affine_D, 
