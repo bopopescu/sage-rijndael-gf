@@ -29,6 +29,7 @@ AUTHORS:
 ###########################################################################
 
 from sage.matrix.constructor import matrix
+from sage.matrix.constructor import column_matrix
 from sage.rings.finite_rings.constructor import FiniteField
 from sage.rings.integer import Integer
 from sage.structure.sage_object import SageObject
@@ -47,11 +48,9 @@ class RijndaelGF(SageObject):
         
         from sage.rings.polynomial.polynomial_ring import polygen
         from sage.rings.finite_rings.integer_mod_ring import Integers
-        z = polygen(Integers(2))
-        mod = z**8 + z**4 + z**3 + z + 1
+        pgen = polygen(Integers(2))
+        mod = pgen**8 + pgen**4 + pgen**3 + pgen + 1
         self._F = FiniteField(2**self._bits_to_word, 'x', modulus=mod)
-        self._state_ms = MatrixSpace(self._F, 4, self._Nb)
-        self._key_ms = MatrixSpace(self._F, 4, self._Nk)
         self._round_num_table = matrix([[10,11,12,13,14], [11,11,12,13,14],
                                        [12,12,12,13,14], [13,13,13,13,14],
                                        [14,14,14,14,14]])
@@ -70,8 +69,8 @@ class RijndaelGF(SageObject):
                        self._F("1"),
                        self._F("x^7 + x^5 + x^4 + x^2 + 1"),
                        self._F("x^7 + x^3 + x^2 + x + 1")]
-        # Fix this/these line/s!
-        self._sb_affine_E = sum([sb_E_coeffs[i] * self._polyring.gen()**(2**i) for i in range(8)])
+        self._sb_affine_E = sum([sb_E_coeffs[i] * self._polyring.gen()**(2**i)
+                                 for i in range(8)])
         self._sb_affine_E += self._polyring("x^6 + x^5 + x + 1")
         sb_D_coeffs = [self._F("x^2 + 1"),
                        self._F("x^7 + x^6 + x^5 + x^4 + x^3 + x^2 + x"),
@@ -81,81 +80,159 @@ class RijndaelGF(SageObject):
                        self._F("x^6 + x^4 + x^3 + 1"), 
                        self._F("x^7 + x^6 + x^4 + x^3 + x + 1"),
                        self._F("x^6 + x^5 + x^3 + x^2 + x")]
-        self._sb_affine_D = sum([sb_D_coeffs[i] * self._polyring.gen()**(2**i) for i in range(8)])
+        self._sb_affine_D = sum([sb_D_coeffs[i] * self._polyring.gen()**(2**i)
+                                 for i in range(8)])
         self._sb_affine_D += self._polyring("x^2 + 1")
         self._mix_col_cx = self._polyring("(x+1)*(p^3) + p^2 + p^1 + x")
         self._mix_col_dx = self._polyring("""(x^3 + x + 1)*(p^3) + 
                                           (x^3 + x^2 + 1)*(p^2) + (x^3 + 1)*p +
                                           (x^3 + x^2 + x)""")
         self._mix_col_mod = self._polyring("p^4 + 1")
+
+    def __repr__(self):
+        msg = """Rijndael-GF block cipher with block length {0}, key length 
+              {1}, and {2} rounds."""
+        return msg.format(self._Nb, self._Nk, self._Nr)
+
+    def block_length(self):
+        return self._Nb
+
+    def key_length(self):
+        return self._Nk
+
+    def number_rounds(self):
+        return self._Nk
         
-    # Is there any way to make this prettier?
+    def _hex_to_GF(self, h):
+        return self._F(map(int, bin(int(h,16))[2:].zfill(8))[::-1])
+
+    def _GF_to_hex(self, gf):
+        return hex(gf.integer_representation())[2:].zfill(2)
+
+    def _bin_to_GF(self, b):
+        return self._F(map(int, b)[::-1])
+
+    def _GF_to_bin(self, gf):
+        return bin(gf.integer_representation())[2:].zfill(8)
+
+    def _binString_to_hexString(self, binS):
+        btw = self._bits_to_word
+        bin_vals = []
+        for i in range(len(binS) / btw):
+            bin_vals.append(''.join([binS[i*btw + j] for j in range(btw)]))
+        return ''.join([hex(int(b, 2))[2:].zfill(2) for b in bin_vals])
+
     def _hex_to_Fmatrix(self, hexS):
         hexes = [hexS[2*i] + hexS[2*i+1] for i in range(len(hexS)/2)]
-        rows = [[], [], [], []]
-        # We use modcounter here to read entries in by column, not by rows
-        mod_counter = 0
-        for h in hexes:
-            Fval = self._F(map(int, bin(int(h,16))[2:].zfill(8))[::-1])
-            rows[mod_counter].append(Fval)
-            mod_counter = (mod_counter + 1) % 4
+        columns = []
 
-        if len(hexes)/4 == self._Nb:
-            state_matrix = self._state_ms(rows)
-        else:
-            state_matrix = self._key_ms(rows)
-        return state_matrix
+        for i in range(self._Nb):
+            columns.append([self._hex_to_GF(hexes[i*4 + j]) for j in range(4)])
+        return column_matrix(columns)
 
     def _Fmatrix_to_hex(self, fmatrix):
-        # Are inline functions like this bad form?
-        def fToHex(el):
-            return hex(el.integer_representation())[2:].zfill(2)
-        hexs = ''.join([fToHex(el) for col in fmatrix.columns() for el in col])
-        return hexs
+        return ''.join([self._GF_to_hex(el) 
+                        for col in fmatrix.columns() for el in col])
+
+    def _bin_to_Fmatrix(self, binS):
+        return self._hex_to_Fmatrix(self._binString_to_hexString(binS))
+
+    def _Fmatrix_to_bin(self, fmatrix):
+        return ''.join([self._GF_to_bin(el)
+                        for col in fmatrix.columns() for el in col])
         
     def encrypt(self, plain, key, format='hex'):
         if format == 'hex':
-            if len(plain) % 2 == 1:
-                raise ValueError('\'plain\' keyword''s length must be even')
-            if len(key) % 2 == 1:
-                raise ValueError('\'key\' keyword\'s length must be even')
-            
+            if not isinstance(plain, basestring) or \
+               any([c not in '0123456789abcdefABCDEF' for c in plain]):
+                raise ValueError("\'plain\' keyword must be a hex string")
+            if len(plain) != 8 * self._Nb:
+                msg = '\'plain\' keyword\'s length must be {0}, not{1}'
+                raise ValueError(msg.format(8 * self._Nb, len(plain)))
+            if not isinstance(key, basestring) or \
+               any([c not in '0123456789abcdefABCDEF' for c in key]):
+                raise ValueError("\'key\' keyword must be a hex string")
+            if len(key) != 8 * self._Nk:
+                msg = '\'key\' keyword\'s length must be {0}, not {1}'
+                raise ValueError(msg.format(8 * self._Nk, len(key)))
             state = self._hex_to_Fmatrix(plain)
             roundKeys = self.expand_key(self._hex_to_Fmatrix(key))
-            
-        state = self.add_round_key(state, roundKeys[0])
+        elif format == 'binary':
+            if len(plain) != 32 * self._Nb:
+                msg = '\'plain\' keyword\'s length must be {0}, not {1}'
+                raise ValueError(msg.format(32 * self._Nb, len(plain)))
+            if not isinstance(plain, basestring) or \
+               any([c not in '01' for c in plain]):
+                raise ValueError("\'plain\' keyword must be a binary string")
+            if len(key) != 32 * self._Nk:
+                msg = '\'key\' keyword\'s length must be {0}, not {1}'
+                raise ValueError(msg.format(32 * self._Nk, len(key)))
+            if not isinstance(key, basestring) or \
+               any([c not in '01' for c in key]):
+                raise ValueError("\'key\' keyword must be a binary string")
+            state = self._bin_to_Fmatrix(plain)
+            roundKeys = self.expand_key(self._bin_to_Fmatrix(key))
+        else:
+            raise ValueError("""\'format\' keyword must be either \'hex\' or
+                             \'binary\'""")
 
+        state = self.add_round_key(state, roundKeys[0])
         for r in range(self._Nr-1):
             state = self.sub_bytes(state, algorithm='encrypt')
             state = self.shift_rows(state, algorithm='encrypt')
             state = self.mix_columns(state, algorithm='encrypt')
             state = self.add_round_key(state, roundKeys[r+1])
             
-        # Final round
         state = self.sub_bytes(state, algorithm='encrypt')
         state = self.shift_rows(state, algorithm='encrypt')
         state = self.add_round_key(state, roundKeys[self._Nr])
             
-        # convert back to form given and return
-        return self._Fmatrix_to_hex(state)
+        if format == 'hex':
+            return self._Fmatrix_to_hex(state)
+        else:
+            return self._Fmatrix_to_bin(state)
 
     def decrypt(self, ciphertext, key, format='hex'):
         if format == 'hex':
-            if len(ciphertext) % 2 == 1:
-                raise ValueError('\'plain\' keyword''s length must be even')
-            if len(key) % 2 == 1:
-                raise ValueError('\'key\' keyword\'s length must be even')
-
-            state = self._hex_to_Fmatrix(ciphertext)
+            if not isinstance(ciphertext, basestring) or \
+               any([c not in '0123456789abcdefABCDEF' for c in ciphertext]):
+                raise ValueError("\'ciphertext\' keyword must be a hex string")
+            if len(plain) != 8 * self._Nb:
+                msg = '\'plain\' keyword\'s length must be {0}, not{1}'
+                raise ValueError(msg.format(8 * self._Nb, len(ciphertext)))
+            if not isinstance(key, basestring) or \
+               any([c not in '0123456789abcdefABCDEF' for c in key]):
+                raise ValueError("\'key\' keyword must be a hex string")
+            if len(key) != 8 * self._Nk:
+                msg = '\'key\' keyword\'s length must be {0}, not {1}'
+                raise ValueError(msg.format(8 * self._Nk, len(key)))
+            state = self._hex_to_Fmatrix(plain)
             roundKeys = self.expand_key(self._hex_to_Fmatrix(key))
+        elif format == 'binary':
+            if len(ciphertext) != 32 * self._Nb:
+                msg = '\'plain\' keyword\'s length must be {0}, not {1}'
+                raise ValueError(msg.format(32 * self._Nb, len(ciphertext)))
+            if not isinstance(ciphertext, basestring) or \
+               any([c not in '01' for c in ciphertext]):
+                raise ValueError("""\'ciphertext\' keyword must be a binary
+                                 string""")
+            if len(key) != 32 * self._Nk:
+                msg = '\'key\' keyword\'s length must be {0}, not {1}'
+                raise ValueError(msg.format(32 * self._Nk, len(key)))
+            if not isinstance(key, basestring) or \
+               any([c not in '01' for c in key]):
+                raise ValueError("\'key\' keyword must be a binary string")
+            state = self._bin_to_Fmatrix(ciphertext)
+            roundKeys = self.expand_key(self._bin_to_Fmatrix(key))
+        else:
+            raise ValueError("""\'format\' keyword must be either \'hex\' or
+                             \'binary\'""")
 
-        # Undo final round
         state = self.add_round_key(state, roundKeys[self._Nr])
         state = self.shift_rows(state, algorithm='decrypt')
         state = self.sub_bytes(state, algorithm='decrypt')
 
         for r in range(self._Nr-1):
-            # Check if numbering is correct!
             state = self.add_round_key(state, roundKeys[self._Nr - r - 1])
             state = self.mix_columns(state, algorithm='decrypt')
             state = self.shift_rows(state, algorithm='decrypt')
@@ -163,46 +240,60 @@ class RijndaelGF(SageObject):
             
         state = self.add_round_key(state, roundKeys[0])
 
-        return self._Fmatrix_to_hex(state)
+        if format == 'hex':
+            return self._Fmatrix_to_hex(state)
+        else:
+            return self._Fmatrix_to_bin(state)
                   
-    # We should expand a key into a list-matrix of the appropriate size,
-    # then break it into 4xNb sized matrices. Return a list of these 4xNb
-    # sized matrices, one for each round.
-    # TODO: Make this method not so god-forsaken ugly!!!
-    # TODO: Make this method work properly for Nk > 6
+    def _check_valid_GFmatrix(self, GFm, keyword, expected_cols = self._Nb):
+        msg = "keyword \'{0}\' must be a {1} x {2} matrix over GF({3})"
+        msg = msg.format(keyword, 4, expected_cols, self._F.order())
+        if not isinstance(GFm, Matrix_dense) or \
+           not (GFm.base_ring().order() == self._F.order() and \
+                GFm.base_ring().is_field()) or \
+           not (GFm.ncols() == expected_cols and GFm.nrows() == 4):
+            raise TypeError(msg)
+
     def expand_key(self, keyMatrix):
-        expanded = []
-        for i in range(4):
-            expanded.append([self._F.zero()]*(self._Nb * (self._Nr + 1)))
-    
+        self._check_valid_GFmatrix(keyMatrix, 'keyMatrix', self._Nk)
+        
+        # Is this bad form?
+        def add_cols(col1, col2):
+            return map(lambda (x,y): x + y, zip(col1, col2))
+        
+        key_cols = []
+        for i in range(self._Nb * (self._Nr + 1)):
+            key_cols.append([])
+        
         for j in range(self._Nk):
-            for i in range(4):
-                expanded[i][j] = keyMatrix[i][j]
-            
+            key_cols[j] = list(keyMatrix.columns()[j])
+
         for j in range(self._Nk, self._Nb * (self._Nr + 1)):
             if j % self._Nk == 0:
-                expanded[0][j] = expanded[0][j - self._Nk] + \
-                                 self._srd(expanded[1][j-1]) + \
-                                 self._F.gen()**(int(j/self._Nk)-1)
-                for i in range(1,4):
-                    expanded[i][j] = expanded[i][j - self._Nk] + \
-                                     self._srd(expanded[(i+1) % 4][j-1])
+                # Apply non-linear function to k[j - 1]
+                add_key = map(self._srd, key_cols[j - 1])
+                add_key = self._rotate_row(add_key, 1)
+                add_key[0] += self._F.gen() ** (int(j / self._Nk) - 1)
+                key_cols[j] = add_cols(key_cols[j - self._Nk], add_key)
             else:
-                for i in range(4):
-                    expanded[i][j] = expanded[i][j - self._Nk] + \
-                                     expanded[i][j-1]
+                add_key = key_cols[j - 1]
+                if self._Nk > 6 and j % self._Nk == 4:
+                    add_key = map(self._srd, add_key)
+                key_cols[j] = add_cols(key_cols[j - self._Nk], add_key)
 
+        # Copy the expanded columns into 4xNb blocks, ready for addRoundKey
         round_keys = []
         for r in range(self._Nr + 1):
-            rk_entries = []
-            for i in range(4):
-                for j in range(self._Nb):
-                    rk_entries.append(expanded[i][(r * self._Nb) + j])
-            round_keys.append(self._state_ms(rk_entries))
-        
+            rk = column_matrix([key_cols[r*self._Nb + i] 
+                                for i in range(self._Nb)])
+            round_keys.append(rk)
         return round_keys
+                
 
     def add_round_key(self, state, round_key):
+        self._check_valid_GFmatrix(state, 'state')
+        self._check_valid_GFmatrix(round_key, 'round_key', self._Nk)
+
         return state + round_key
 
     def _srd(self, el, algorithm='encrypt'):
@@ -225,12 +316,15 @@ class RijndaelGF(SageObject):
                              or 'decrypt'""")
     
     def sub_bytes(self, state, algorithm='encrypt'):
-        new_state = []
-        for row in state:
-            new_state.append([self._srd(el, algorithm) for el in row])
-        return self._state_ms(new_state)
+        self._check_valid_GFmatrix(state, 'state')
+
+        new_columns = []
+        for col in state.columns():
+            new_columns.append([self._srd(el, algorithm) for el in col])
+        return column_matrix(new_columns)
 
     def mix_columns(self, state, algorithm='encrypt'):
+        self._check_valid_GFmatrix(state, 'state')
         if algorithm == 'encrypt':
             constant = self._mix_col_cx
         elif algorithm == 'decrypt':
@@ -238,35 +332,33 @@ class RijndaelGF(SageObject):
         else:
             raise ValueError("""keyword 'algorithm' must be either 'encrypt'
                              or 'decrypt'""")
+
         newState = [[], [], [], []]
+        new_columns = []
         for col in state.columns():
             bx = constant * self._polyring(list(col))
             bx = list(bx.mod(self._mix_col_mod))
             bx = bx + [self._F.zero()]*(4 - len(bx))
-            for i in range(4):
-                newState[i].append(bx[i])
-        return self._state_ms(newState)
+            new_columns.append(bx)
+        return column_matrix(new_columns)
 
     def _rotate_row(self, row, n):
         row = list(row)
         return row[n:] + row[:n]
 
     def shift_rows(self, state, algorithm='encrypt'):
+        self._check_valid_GFmatrix(state, 'state')
         if algorithm == 'encrypt':
-            offset = self._shiftrows_offset_E
+            offsets = self._shiftrows_offsets_E
         elif algorithm == 'decrypt':
-            offset = self._shiftrows_offset_D
+            offsets = self._shiftrows_offsets_D
         else:
             raise ValueError("""keyword 'algorithm' must be either 'encrypt'
                              or 'decrypt'""")
 
         rows = [[], [], [], []]
-        rows[0] = self._rotate_row(state[0], offset[self._Nb - 4][0])
-        rows[1] = self._rotate_row(state[1], offset[self._Nb - 4][1])
-        rows[2] = self._rotate_row(state[2], offset[self._Nb - 4][2])
-        rows[3] = self._rotate_row(state[3], offset[self._Nb - 4][3])
-            
-        return self._state_ms(rows)
-
-# TODO: add self._srd_affine_D, 
-# self.decrypt, more conversion methods, look at changing word length
+        rows[0] = self._rotate_row(state[0], offsets[self._Nb - 4][0])
+        rows[1] = self._rotate_row(state[1], offsets[self._Nb - 4][1])
+        rows[2] = self._rotate_row(state[2], offsets[self._Nb - 4][2])
+        rows[3] = self._rotate_row(state[3], offsets[self._Nb - 4][3])
+        return matrix(rows)
