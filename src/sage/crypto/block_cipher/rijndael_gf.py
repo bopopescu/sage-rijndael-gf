@@ -69,8 +69,7 @@ We can also use binary strings as input and output. ::
 
 Each of the round component functions (``shift_rows``, ``mix_columns``, and 
 ``sub_bytes``) has a ``_poly`` method which takes an index ``i,j`` and returns
-a polynomial representation of `B_{i,j}` in terms of entries of `A`, as is
-described above. ::
+a polynomial representation of `B_{i,j}` in terms of entries of `A`. ::
 
     sage: i, j = 2, 3
     sage: rgf.sub_bytes_poly(i, j)
@@ -103,9 +102,10 @@ We can use the ``apply_poly`` method to build a matrix whose `i,j` th
 entry equals the polynomial ``_poly(i, j)`` evaluated by replacing each
 variable with the corresponding entry from a particular state matrix ``state``.
 Essentially, ``apply_poly`` calculates `B = \phi(A)`, where `A` is specified
-as ``state`` and `\phi` corresponds to the ``_poly`` method. Calling 
-``apply_poly`` is also equivalent to applying the round component function 
-associated with ``_poly`` to a state. ::
+as ``state`` and `\phi` is the round component function corresponding to the
+``_poly`` method passed to ``apply_poly``. Calling ``apply_poly`` is also
+equivalent to applying the round component function associated with ``_poly``
+to a state. ::
 
     sage: state = rgf.hex_to_GF('c4cedcabe694694e4b23bfdd6fb522fa')
     sage: result = rgf.apply_poly(state, rgf.sub_bytes_poly)
@@ -247,9 +247,10 @@ class RijndaelGF(SageObject):
         
         INPUT:
         
-        - ``Nb`` -- The block length of this particular instantiation.
+        - ``Nb`` -- The block length of this instantiation. Must be between 4
+          and 8.
         
-        - ``Nk`` -- The key length of this particular instantion.
+        - ``Nk`` -- The key length of this instantion. Must be between 4 and 8.
 
         - ``state_chr`` -- The variable name for polynomials representing
           elements from state matrices.
@@ -258,21 +259,20 @@ class RijndaelGF(SageObject):
           elements of the key schedule.
 
         EXAMPLES::
-
             
             sage: from sage.crypto.block_cipher.rijndael_gf import RijndaelGF
             sage: rgf = RijndaelGF(6, 8)
             sage: rgf
             Rijndael-GF block cipher with block length 6, key length 8, and 14 rounds.
             
-        By changing ``state_chr`` we can alter the names of variables in 
+        By changing ``state_chr`` we can alter the names of variables in
         polynomials representing elements from state matrices. ::
 
             sage: rgf = RijndaelGF(4, 6, state_chr='myChr')
             sage: rgf.mix_columns_poly(3, 2)
             (x + 1)*myChr02 + myChr12 + myChr22 + (x)*myChr32
 
-        We can also alter the name of variables in polynomials representing 
+        We can also alter the name of variables in polynomials representing
         elements from round keys by changing ``key_chr``. ::
 
             sage: rgf = RijndaelGF(4, 6, key_chr='myKeyChr')
@@ -345,8 +345,7 @@ class RijndaelGF(SageObject):
 
     def __call__(self, text, key, algorithm='encrypt', format='hex'):
         r"""
-        Returns a plaintext or ciphertext encryption/decryption of ``text``
-        with key ``key``.
+        Returns the encryption/decryption of ``text`` with key ``key``.
 
         INPUT:
 
@@ -375,7 +374,7 @@ class RijndaelGF(SageObject):
             sage: rgf(text, key, algorithm='decrypt')
             '9bf83275406304f050c826ca72d035e6'
 
-        We can use binary strings for ``text`` and ``key``. ::
+        We can also use binary strings for ``text`` and ``key``. ::
 
             sage: text = '11011100011010000011101111011011' * 4
             sage: key = '01000000000011000101101011011110' * 4
@@ -395,7 +394,7 @@ class RijndaelGF(SageObject):
 
     def __repr__(self):
         r"""
-        Return the string representation of ``self``.
+        Returns the string representation of ``self``.
 
         EXAMPLES ::
 
@@ -438,7 +437,6 @@ class RijndaelGF(SageObject):
     def number_rounds(self):
         r"""
         Returns the number of rounds used in this instantiation of Rijndael-GF.
-        Fully determined by the block length and key length of the cipher.
 
         EXAMPLES::
 
@@ -451,25 +449,23 @@ class RijndaelGF(SageObject):
         
     def hex_to_GF(self, H, matrix=True):
         r"""
-        Returns the list of or the state matrix of elements of `\GF{2^8}` 
-        corresponding to the hex string ``H``. Each element in `\GF{2^8}`
-        corresponds to a unique 8-bit binary string which corresponds to two
-        hex characters. In particular, the element
-        `a_7x^7 + a_6x^6 + a_5x^5 + a_4x^4 + a_3x^3 + a_2x^2 + a_1x^1 + a_0` 
-        corresponds to the binary string '`a_7a_6a_5a_4a_3a_2a_1a_0`'.
+        Returns a matrix/list of elements of `\GF{2^8}` corresponding to ``H``.
 
         INPUT:
         
         - ``H`` -- A hex string where every two hex characters correspond to a
-          single value in `\GF{2^8}`
+          single element in `\GF{2^8}`
           
-        - ``matrix`` -- (default: ``True``) Returns a list if ``False``. 
-          Returns a state matrix over `\GF{2^8}` if ``True``.
+        - ``matrix`` -- (default: ``True``) Returns a list if ``False``;
+          returns a state matrix if ``True``.
 
         OUTPUT:
 
         - A list of or a state matrix of elements of `\GF{2^8}` where each
-          element corresponds to the appropriate hex value in ``H``. 
+          element corresponds to the appropriate hex value in ``H``. In
+          particular, every element `a_7x^7 + a_6x^6 + a_5x^5 + a_4x^4 +
+          a_3x^3 + a_2x^2 + a_1x^1 + a_0` in `\GF{2^8}` corresponds to the
+          8-bit binary string '`a_7a_6a_5a_4a_3a_2a_1a_0`'.
 
         EXAMPLES::
 
@@ -502,11 +498,7 @@ class RijndaelGF(SageObject):
 
     def GF_to_hex(self, GF):
         r"""
-        Returns the hex string representation of ``GF``.  Each element in 
-        `\GF{2^8}` corresponds to a unique 8-bit binary string, which 
-        corresponds to two hex characters. In particular, the element
-        `a_7x^7 + a_6x^6 + a_5x^5 + a_4x^4 + a_3x^3 + a_2x^2 + a_1x^1 + a_0`
-        corresponds to the binary string '`a_7a_6a_5a_4a_3a_2a_1a_0`'.
+        Returns the hex string representation of ``GF``.
 
         INPUT:
         
@@ -516,7 +508,10 @@ class RijndaelGF(SageObject):
         OUTPUT:
 
         - A hex string representation of ``GF``, where every two characters in
-          the string correspond to a single element in `\GF{2^8}`.
+          the string correspond to a single element in `\GF{2^8}`. In
+          particular, every element `a_7x^7 + a_6x^6 + a_5x^5 + a_4x^4 +
+          a_3x^3 + a_2x^2 + a_1x^1 + a_0` in `\GF{2^8}` corresponds to the
+          8-bit binary string '`a_7a_6a_5a_4a_3a_2a_1a_0`'.
 
         EXAMPLES::
         
@@ -571,25 +566,23 @@ class RijndaelGF(SageObject):
 
     def bin_to_GF(self, B, matrix=True):
         r"""
-        Returns the list of or the state matrix of elements of `\GF{2^8}`
-        corresponding to the binary string ``B``. Each element in `\GF{2^8}`
-        corresponds to a unique 8-bit binary string. In particular, 
-        the element 
-        `a_7x^7 + a_6x^6 + a_5x^5 + a_4x^4 + a_3x^3 + a_2x^2 + a_1x^1 + a_0` 
-        corresponds to the binary string '`a_7a_6a_5a_4a_3a_2a_1a_0`'.
+        Returns a matrix/list of elements of `\GF{2^8}` corresponding to ``B``.
 
         INPUT:
 
-        - ``B`` -- A binary string where every eight bits correspond to a 
-          single value in `\GF{2^8}`
+        - ``B`` -- A binary string where every eight bits correspond to a
+          single element in `\GF{2^8}`
           
-        - ``matrix`` -- (default: ``True``) Returns a list if ``False``. 
+        - ``matrix`` -- (default: ``True``) Returns a list if ``False``.
           Returns a state matrix over `\GF{2^8}` if ``True``.
 
         OUTPUT:
 
         - A list of or a state matrix of elements of `\GF{2^8}` where each
-          element corresponds to the appropriate 8-bit binary string in ``B``. 
+          element corresponds to the appropriate 8-bit binary string in ``B``.
+          In particular, every element `a_7x^7 + a_6x^6 + a_5x^5 + a_4x^4 +
+          a_3x^3 + a_2x^2 + a_1x^1 + a_0` in `\GF{2^8}` corresponds to the
+          8-bit binary string '`a_7a_6a_5a_4a_3a_2a_1a_0`'.
 
         EXAMPLES::
 
@@ -633,11 +626,7 @@ class RijndaelGF(SageObject):
 
     def GF_to_bin(self, GF):
         r"""
-        Returns the binary string representation of ``GF``.  Each element in 
-        `\GF{2^8}` corresponds to a unique 8-bit binary string. 
-        In particular, the element
-        `a_7x^7 + a_6x^6 + a_5x^5 + a_4x^4 + a_3x^3 + a_2x^2 + a_1x^1 + a_0`
-        corresponds to the binary string '`a_7a_6a_5a_4a_3a_2a_1a_0`'.
+        Returns the binary string representation of ``GF``.
 
         INPUT:
         
@@ -648,7 +637,9 @@ class RijndaelGF(SageObject):
 
         - A binary string representation of ``GF``, where every eight 
           characters in the string corresponds to a single element in
-          `\GF{2^8}`.
+          `\GF{2^8}`. In particular, every element `a_7x^7 + a_6x^6 + a_5x^5 +
+          a_4x^4 + a_3x^3 + a_2x^2 + a_1x^1 + a_0` in `\GF{2^8}` corresponds
+          to the binary string '`a_7a_6a_5a_4a_3a_2a_1a_0`'.
 
         EXAMPLES::
 
@@ -701,8 +692,7 @@ class RijndaelGF(SageObject):
 
     def encrypt(self, plain, key, format='hex'):
         r"""
-        Returns the plaintext ``plain`` encrypted with key ``key`` in the 
-        format specified by ``format``.
+        Returns the plaintext ``plain`` encrypted with the key ``key``.
 
         INPUT:
 
@@ -786,8 +776,7 @@ class RijndaelGF(SageObject):
 
     def decrypt(self, ciphertext, key, format='hex'):
         r"""
-        Decrypts ``ciphertext`` with the key ``key`` and returns it as a string
-        in the format ``format``.
+        Returns the ciphertext ``ciphertext`` decrypted with the key ``key``.
 
         INPUT:
 
@@ -877,15 +866,16 @@ class RijndaelGF(SageObject):
 
         INPUT:
 
-        - ``GFm`` -- If ``GFm`` is a proper state matrix, this method returns
-          nothing. Otherwise, this method raises an error.
+        - ``GFm`` -- If ``GFm`` is a `4 \times Nb` state matrix over
+          `\GF{2^8}`, this method does nothing. Otherwise, this method raises
+          an error.
 
-        - ``keyword`` -- The name of ``GFm`` from where this method was called.
-          For example, if called from ``sub_bytes``, ``keyword`` would be 
-          "state".
+        - ``keyword`` -- The name of the keyword ``GFm`` from where this
+          method was called, for the potential error message. For example, if
+          called from ``sub_bytes``, ``keyword`` would be "state".
           
-        - ``expected_cols`` -- The number of columns ``GFm`` should have. 
-          Despite the ``expected_cols=None``, the default is actually 
+        - ``expected_cols`` -- The number of columns ``GFm`` should have.
+          Despite the ``expected_cols=None``, the default is actually
           ``self._Nb``, since we cannot reference the variables of ``self``
           as a default argument.
 
@@ -918,8 +908,7 @@ class RijndaelGF(SageObject):
 
     def _test_poly_input_bounds(self, row, col):
         r"""
-        Raises an error if ``row`` or ``col`` are not in the correct bounds of
-        a state matrix.
+        Raises an error if ``[row,col]`` is an invalid state matrix entry.
 
         INPUT: 
 
@@ -953,7 +942,7 @@ class RijndaelGF(SageObject):
 
         INPUT:
 
-        - ``key`` -- The key to build a key schedule from. Must be a matrix 
+        - ``key`` -- The key to build a key schedule from. Must be a matrix
           over `\GF{2^8}` of dimensions `4 \times N_k`.
 
         OUTPUT:
@@ -1008,12 +997,12 @@ class RijndaelGF(SageObject):
 
     def expand_key_poly(self, row, col, round):
         r"""
-        Returns a polynomial representing the ``row,col`` th entry of the 
+        Returns a polynomial representing the ``row,col`` th entry of the
         ``round`` th round key.
 
-        INPUT: 
+        INPUT:
 
-        - ``row`` -- The row position of the element represented by this 
+        - ``row`` -- The row position of the element represented by this
           polynomial.
           
         - ``col`` -- The column position of the element represented by this
@@ -1021,9 +1010,8 @@ class RijndaelGF(SageObject):
 
         OUTPUT:
 
-        - A polynomial representing the ``row,col`` th entry of the ``round`` 
-          th round key in terms of entries of the input key. Note that each 
-          round key has dimensions `4 \times N_b`.
+        - A polynomial representing the ``row,col`` th entry of the ``round``
+          th round key in terms of entries of the input key.
 
         EXAMPLES::
 
@@ -1034,7 +1022,7 @@ class RijndaelGF(SageObject):
             sage: rgf.expand_key_poly(1, 2, 1)
             (x^2 + 1)*k23^254 + (x^3 + 1)*k23^253 + (x^7 + x^6 + x^5 + x^4 + x^3 + 1)*k23^251 + (x^5 + x^2 + 1)*k23^247 + (x^7 + x^6 + x^5 + x^4 + x^2)*k23^239 + k23^223 + (x^7 + x^5 + x^4 + x^2 + 1)*k23^191 + (x^7 + x^3 + x^2 + x + 1)*k23^127 + k10 + k11 + k12 + (x^6 + x^5 + x)
 
-        It should be noted that ``expand_key_poly`` cannot be used with 
+        It should be noted that ``expand_key_poly`` cannot be used with
         ``apply_poly`` or ``compose``, due to the state polynomials and the
         expanded key polynomials being represented differently. ::
 
@@ -1084,32 +1072,26 @@ class RijndaelGF(SageObject):
         
     def apply_poly(self, state, poly_method, algorithm='encrypt'):
         r"""
-        Returns the state matrix in `\GF{2^8}` where the `i,j` th entry of the
-        output equals the polynomial ``poly_method(i, j, algorithm)`` 
-        evaluated by setting its variables equal to the corresponding
-        entries of ``state``.
+        Returns a state matrix where ``poly_method`` is applied to each entry.
 
         INPUT:
         
         - ``state`` -- The state matrix over `\GF{2^8}` to which 
-          ``poly_method`` is applied to. In other words, the entries of 
-          ``state`` replace the variables in the polynomial returned
-          by ``_poly_method(i, j, algorithm)``, evaluating the polynomial to
-          give the `i,j` th entry of the output.
+          ``poly_method`` is applied to.
 
         - ``poly_method`` -- The method to apply to ``state``. ``poly_method``
           must be callable as ``poly_method(i, j, algorithm)`` and must return
           a polynomial.
 
         - ``algorithm`` -- (default: "encrypt") Passed directly to 
-          ``poly_method`` to determine encryption or decryption. The
+          ``poly_method`` to select encryption or decryption. The
           encryption flag is "encrypt" and the decrypt flag is "decrypt".
 
         OUTPUT:
 
-        - A state matrix in `\GF{2^8}` where the `i,j` th element of that 
-          matrix equals the polynomial ``poly_method(i, j, algorithm)`` with
-          its variables equal to the entries of ``state``.
+        - A state matrix in `\GF{2^8}` whose `i,j` th entry equals the
+          polynomial ``poly_method(i, j, algorithm)`` evaluated by setting
+          its variables equal to the corresponding entries of ``state``.
 
         EXAMPLES::
 
@@ -1151,27 +1133,18 @@ class RijndaelGF(SageObject):
 
     def compose(self, f, g, algorithm='encrypt'):
         r"""
-        If ``g`` is a method which takes an index ``i,j`` and returns a 
-        polynomial representing the `i,j` th entry of the matrix `g(A)` in
-        terms of entries of `A`, where `A` is a state matrix, then 
-        ``compose(f,g)`` returns a method which takes an index ``i,j`` and 
-        returns a polynomial representing the `i,j` th entry of the matrix
-        `g(f(A))` in terms of entries of `A`. On the other hand, if ``g`` is
-        a polynomial representing the `i,j` th entry of the matrix `g(A)` in
-        terms of entries of `A`, then ``compose(f,g)`` returns a polynomial
-        representing the `i,j` th entry of `g(f(A))` in terms of entries of
-        `A`. In both circumstances, ``f`` must be a method which takes an
-        index ``i,j`` and returns a polynomial representing the `i,j` th
-        entry of `f(A)` in terms of the entries of the state matrix `A`.
+        Returns a polynomial representing `g(f(A))_{i,j}` if ``g`` is a
+        polynomial representing `g(A)_{i,j}`, or returns a ``_poly`` method
+        which returns polynomials of that form if `g` is a ``_poly`` method.
 
         INPUT:
 
-        - ``f`` -- A function of the form ``f(i, j, algorithm)`` which returns
-          a polynomial reprentation of the `i,j` th entry of `f(A)`.
+        - ``f`` -- A ``_poly`` function of the form ``f(i, j, algorithm)``
+          which returns a polynomial reprentation of `f(A)_{i,j}`.
 
-        - ``g`` -- A function of the form ``g(i, j, algorithm)`` which returns
-          a polynomial reprentation of the `i,j` th entry of `g(A)` OR a 
-          polynomial representing the `i,j` th entry of `g(A)`.
+        - ``g`` -- A ``_poly`` function of the form ``g(i, j, algorithm)``
+          which returns a polynomial reprentation of `g(A)_{i,j}` OR a
+          polynomial representing `g(A)_{i,j}`.
 
         - ``algorithm`` -- (default: "encrypt") Whether ``f`` and ``g``
           should use their encryption transformations or their decryption
@@ -1180,10 +1153,18 @@ class RijndaelGF(SageObject):
 
         OUTPUT:
 
-        - If ``g`` is a method, this returns a new method which takes an
-          index ``i,j`` and returns a polynomial representing the `i,j` th 
-          entry of `g(f(A))`. If ``g`` is a polynomial, this returns a
-          polynomial representing the `i,j` th entry of `g(f(A))`.
+        - If ``g`` is a method which takes an index ``i,j`` and returns a
+          polynomial representing the `i,j` th entry of the matrix `g(A)` in
+          terms of entries of `A`, where `A` is a state matrix, then
+          ``compose(f,g)`` returns a method which takes an index ``i,j`` and
+          returns a polynomial representing the `i,j` th entry of the matrix
+          `g(f(A))` in terms of entries of `A`. On the other hand, if ``g`` is
+          a polynomial representing the `i,j` th entry of the matrix `g(A)` in
+          terms of entries of `A`, then ``compose(f,g)`` returns a polynomial
+          representing the `i,j` th entry of `g(f(A))` in terms of entries of
+          `A`. In both circumstances, ``f`` must be a method which takes an
+          index ``i,j`` and returns a polynomial representing the `i,j` th
+          entry of `f(A)` in terms of the entries of the state matrix `A`.
 
         EXAMPLES
 
@@ -1208,7 +1189,7 @@ class RijndaelGF(SageObject):
             sage: result(state.list()) == new_state[1,3]
             True
 
-        We can also use ``compose`` to make a new function which returns the 
+        We can also use ``compose`` to make a new function which returns the
         polynomial representing the `i,j` th entry of a matrix after multiple
         round functions: ::
 
@@ -1232,9 +1213,9 @@ class RijndaelGF(SageObject):
             True
 
         If the second argument is a polynomial, then the value of ``algorithm``
-        is passed directly to the first argument `f` during evaluation. 
+        is passed directly to the first argument `f` during evaluation.
         However, if the second argument is a method, changing ``algorithm``
-        does nothing since the returned method must have its own settable 
+        does nothing since the returned method must have its own settable
         ``algorithm`` keyword in order to have the same arguments as the
         rest of the ``_poly(row, col, algorithm='encrypt')`` methods. ::
         
@@ -1256,19 +1237,18 @@ class RijndaelGF(SageObject):
 
     def add_round_key(self, state, round_key):
         r"""
-        Returns a state matrix over `\GF{2^8}` representing the round key
-        addition between state matrices ``state`` and ``round_key``.
+        Returns the round-key addition of matrices ``state`` and ``round_key``.
 
         INPUT:
         
-        - ``state`` -- The state matrix to have the round key added to.
+        - ``state`` -- The state matrix to have ``round_key`` added to.
 
         - ``round_key`` -- The round key to add to ``state``.
 
         OUTPUT:
 
-        - A state matrix which is the round key addition of ``state`` and 
-          ``round_key``. This transformation is simply the entry-wise addition
+        - A state matrix which is the round key addition of ``state`` and
+          ``round_key``. This transformation is simply the entrywise addition
           of these two matrices.
 
         EXAMPLES::
@@ -1289,29 +1269,28 @@ class RijndaelGF(SageObject):
     def sub_bytes_poly(self, row, col, algorithm='encrypt', 
                        no_inversion=False):
         r"""
-        Returns a polynomial representing the ``row,col`` th entry of a state
-        matrix after the SubBytes method has been applied to it. 
+        Returns a polynomial representing `SubBytes(A)_{\textit{row, col}}`.
 
         INPUT:
 
         - ``row`` -- The row number of the entry represented by this method's
           output.
 
-        - ``col`` -- The column number of the entry represented by this 
+        - ``col`` -- The column number of the entry represented by this
           method's output.
 
         - ``algorithm`` -- (default: "encrypt") Whether to return the
           polynomial as an encryption or as a decryption. The encryption flag
           is "encrypt" and the decryption  flag is "decrypt".
 
-        - ``no_inversion`` -- (default: ``False``) Don't include the inversion
+        - ``no_inversion`` -- (default: ``False``) Don't perform the inversion
           step, only perform the affine transformation. Primarily intended
-          to increase performance during decryption, as is shown in the 
+          to increase performance during decryption, as is shown in the
           below example.
 
         OUTPUT:
 
-        - A polynomial representing the ``row,col`` th entry of a state matrix 
+        - A polynomial representing the ``row,col`` th entry of a state matrix
           after the SubBytes method has been applied to it.
 
         EXAMPLES::
@@ -1321,7 +1300,7 @@ class RijndaelGF(SageObject):
             sage: rgf.sub_bytes_poly(2, 3)
             (x^2 + 1)*a23^254 + (x^3 + 1)*a23^253 + (x^7 + x^6 + x^5 + x^4 + x^3 + 1)*a23^251 + (x^5 + x^2 + 1)*a23^247 + (x^7 + x^6 + x^5 + x^4 + x^2)*a23^239 + a23^223 + (x^7 + x^5 + x^4 + x^2 + 1)*a23^191 + (x^7 + x^3 + x^2 + x + 1)*a23^127 + (x^6 + x^5 + x + 1)
 
-        We can use this polynomial to calculate the `i,j` th entry of the 
+        We can use this polynomial to calculate individual entries of the
         output matrix for any given state as such: ::
 
             sage: state = rgf.hex_to_GF('6385b79ffc538df997be478e7547d691')
@@ -1337,11 +1316,11 @@ class RijndaelGF(SageObject):
 
         When generating a decryption polynomial, calculating the inverse of
         the polynomial representing the affine transformation can be a very
-        slow process.
-        In order to speed up decryption when applying ``sub_bytes_poly`` to
-        a state matrix, it is recommended to calculate the decryption
-        polynomial with ``no_inversion=True``, evaluate the arguments, then
-        perform the inversion after this result has been calculated. ::
+        slow process. In order to speed up decryption when applying
+        ``sub_bytes_poly`` to a state matrix, it is recommended to calculate
+        the decryption polynomial with ``no_inversion=True``, evaluate the
+        arguments, then perform the inversion after this result has been
+        calculated. ::
 
             sage: poly = rgf.sub_bytes_poly(0, 0, 
             ....: algorithm='decrypt', no_inversion=True)
@@ -1374,21 +1353,20 @@ class RijndaelGF(SageObject):
 
     def _srd(self, el, algorithm='encrypt'):
         r"""
-        Returns the application of the non-linear transformation SubBytes
-        (also known as SRD) to ``el``.
+        Returns the application of SubBytes (`S_{RD}`) to ``el``.
 
-        INPUT: 
+        INPUT:
 
         - ``el`` -- An element of `\GF{2^8}`.
 
         - ``algorithm`` -- (default: "encrypt") Whether to perform the
-          encryption transformation or the decryption transformation. 
+          encryption transformation or the decryption transformation.
           The encryption flag is "encrypt" and the decryption flag is
           "decrypt".
 
         OUTPUT:
         
-        - The result of the application of the non-linear transformation 
+        - The result of the application of the non-linear transformation
           SubBytes to ``el``.
 
         EXAMPLES::
@@ -1414,8 +1392,7 @@ class RijndaelGF(SageObject):
 
     def sub_bytes(self, state, algorithm='encrypt'):
         r"""
-        Returns a state matrix in `\GF{2^8}` which is the result of applying
-        the SubBytes round component function to ``state``.
+        Returns the application of `SubBytes` to the state matrix ``state``.
 
         INPUT:
 
@@ -1427,9 +1404,8 @@ class RijndaelGF(SageObject):
 
         OUTPUT:
 
-        - The state matrix where SubBytes has been applied to every entry of
-          ``state``. The SubBytes transformation consists of first an inversion
-          in `\GF{2^8}`, then applying an affine transformation to the result.
+        - The state matrix over `\GF{2^8}` where `SubBytes` has been applied
+          to every entry of ``state``.
 
         EXAMPLES::
 
@@ -1439,7 +1415,6 @@ class RijndaelGF(SageObject):
             sage: result = rgf.sub_bytes(state)
             sage: rgf.GF_to_hex(result)
             '3e1c22c0b6fcbf768da85067f6170495'
-            <BLANKLINE>
             sage: decryption = rgf.sub_bytes(result, algorithm='decrypt')
             sage: decryption == state
             True
@@ -1449,25 +1424,24 @@ class RijndaelGF(SageObject):
 
     def mix_columns_poly(self, row, col, algorithm='encrypt'):
         r"""
-        Returns a polynomial representing the ``row,col`` th entry of a state
-        matrix after the MixColumns method has been applied to it.
+        Returns a polynomial representing `MixColumns(A)_{\textit{row, col}}`.
 
-        INPUT: 
+        INPUT:
         
-        - ``row`` -- The row number of the entry represented by this method's 
+        - ``row`` -- The row number of the entry represented by this method's
           output.
           
-        - ``col`` -- The column number of the entry represented by this 
+        - ``col`` -- The column number of the entry represented by this
           method's output.
 
         - ``algorithm`` -- (default: "encrypt") Whether to perform the
-          encryption transformation or the decryption transformation. The 
+          encryption transformation or the decryption transformation. The
           encryption flag is "encrypt" and the decryption flag is "decrypt".
 
         OUTPUT:
         
-        - A polynomial in terms of entries of the input state matrix which 
-          represents the ``row,col`` th entry of the output matrix after 
+        - A polynomial in terms of entries of the input state matrix which
+          represents the ``row,col`` th entry of the output matrix after
           MixColumns has been applied to it.
 
         EXAMPLES::
@@ -1477,7 +1451,7 @@ class RijndaelGF(SageObject):
             sage: rgf.mix_columns_poly(3, 1)
             (x + 1)*a01 + a11 + a21 + (x)*a31
 
-        We can use this to calculate the `i,j` th entry of a state matrix after
+        We can use this to calculate individual entries of a state matrix after
         the decryption version of MixColumns has been applied to it as such: ::
 
             sage: poly = rgf.mix_columns_poly(2, 2, algorithm='decrypt')
@@ -1485,7 +1459,6 @@ class RijndaelGF(SageObject):
             sage: result = poly(state.list())
             sage: rgf.GF_to_hex(result)
             'b7'
-            <BLANKLINE>
             sage: output = rgf.mix_columns(state, algorithm='decrypt')
             sage: output[2,2] == result
             True
@@ -1502,8 +1475,7 @@ class RijndaelGF(SageObject):
 
     def mix_columns(self, state, algorithm='encrypt'):
         r"""
-        Returns a state matrix in `\GF{2^8}` which is the result of applying
-        the MixColumns round component function to ``state``.
+        Returns the application of `MixColumns` to the state matrix ``state``.
 
         INPUT:
 
@@ -1515,13 +1487,8 @@ class RijndaelGF(SageObject):
 
         OUTPUT:
         
-        - The state matrix which is the result of applying MixColumns to 
-          ``state``. The MixColumns transformation involves representing each 
-          column of ``state`` as a degree `3` polynomial 
-          `a(x) \in \GF{2^8}[x]`, then replacing that column with another
-          column corresponding to the coefficients of
-          `a(x) \cdot (03 x^3 + 01 x^2 + 01 x + 02) \, \, (\mathrm{mod} \, \,
-          x^4 + 1)`.
+        - The state matrix over `\GF{2^8}` which is the result of applying
+          MixColumns to ``state``.
 
         EXAMPLES::
 
@@ -1531,7 +1498,6 @@ class RijndaelGF(SageObject):
             sage: result = rgf.mix_columns(state)
             sage: rgf.GF_to_hex(result)
             '921f748fd96e937d622d7725ba8ba50c'
-            <BLANKLINE>
             sage: decryption = rgf.mix_columns(result, algorithm='decrypt')
             sage: decryption == state
             True
@@ -1541,15 +1507,14 @@ class RijndaelGF(SageObject):
 
     def shift_rows_poly(self, row, col, algorithm='encrypt'):
         r"""
-        Returns a polynomial representing the ``row,col`` th entry of a state 
-        matrix after ShiftRows has been applied to it.
+        Returns a polynomial representing `ShiftRows(A)_{\textit{row,col}}`.
 
-        INPUT: 
+        INPUT:
 
         - ``row`` -- The row number of the entry represented by this method's
           output.
 
-        - ``col`` -- The column number of the entry represented by this 
+        - ``col`` -- The column number of the entry represented by this
           method's output.
 
         - ``algorithm`` -- (default: "encrypt") Whether to perform ShiftRows'
@@ -1558,7 +1523,7 @@ class RijndaelGF(SageObject):
 
         OUTPUT:
         
-        - A polynomial in terms of entries of the input state matrix which 
+        - A polynomial in terms of entries of the input state matrix which
           represents the ``row,col`` th entry of the output matrix after
           ShiftRows has been applied to it.
 
@@ -1569,7 +1534,7 @@ class RijndaelGF(SageObject):
             sage: rgf.shift_rows_poly(2, 3)
             a21
             
-        We can use this to calculate the ``row,col`` th entry of a state matrix
+        We can use this to calculate individual entries of a state matrix
         after the decryption version of ShiftRows has been applied to it as
         such: ::
 
@@ -1578,7 +1543,6 @@ class RijndaelGF(SageObject):
             sage: result = poly(state.list())
             sage: rgf.GF_to_hex(result)
             '3c'
-            <BLANKLINE>
             sage: output = rgf.shift_rows(state, algorithm='decrypt')
             sage: output[2,3] == result
             True        
@@ -1595,8 +1559,7 @@ class RijndaelGF(SageObject):
     
     def shift_rows(self, state, algorithm='encrypt'):
         r"""
-        Returns the application of the round component function ShiftRows to
-        the state matrix ``state``.
+        Returns the application of `ShiftRows` to the state matrix ``state``.
 
         INPUT:
         
@@ -1620,7 +1583,6 @@ class RijndaelGF(SageObject):
             sage: result = rgf.shift_rows(state)
             sage: rgf.GF_to_hex(result)
             'ad9c7e017e55ef25bc150fe01ccb6395'
-            <BLANKLINE>
             sage: decryption = rgf.shift_rows(result, algorithm='decrypt')
             sage: decryption == state
             True
